@@ -1,6 +1,7 @@
 # --- Rust / Tauri ---
 /WikiApp/src-tauri/target/
 /WikiApp/node_modules/
+node_modules/
 /WikiApp/dist/
 **/*.exe
 **/*.dll
