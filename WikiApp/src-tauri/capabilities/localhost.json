@@ -1,0 +1,17 @@
+{
+    "$schema": "../gen/schemas/desktop-schema.json",
+    "identifier": "localhost-access",
+    "description": "Allow localhost:3000 to access Tauri API",
+    "windows": [
+        "main"
+    ],
+    "permissions": [
+        "core:default",
+        "opener:default"
+    ],
+    "remote": {
+        "urls": [
+            "http://localhost:3000"
+        ]
+    }
+}

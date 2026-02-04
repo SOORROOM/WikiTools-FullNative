@@ -19,6 +19,10 @@
       }
     ],
     "security": {
+      "capabilities": [
+        "default",
+        "localhost-access"
+      ],
       "csp": null
     }
   },

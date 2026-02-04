@@ -130,18 +130,88 @@ async fn download_and_open(url: String) -> Result<(), String> {
     let temp_dir = std::env::temp_dir();
     let file_path = temp_dir.join(filename);
 
-    let response = reqwest::blocking::get(&url).map_err(|e| e.to_string())?;
-    let bytes = response.bytes().map_err(|e| e.to_string())?;
+    // Gérer les URLs relatives
+    let full_url = if url.starts_with("http") { 
+        url 
+    } else if url.starts_with("/") {
+        format!("http://localhost:3000{}", url)
+    } else {
+        format!("http://localhost:3000/{}", url)
+    };
+
+    println!("📥 Téléchargement de : {}", full_url);
+
+    // Utilisation ASYNC pour ne pas bloquer/paniquer le runtime
+    let response = reqwest::get(&full_url).await.map_err(|e| e.to_string())?;
+    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+    
+    // Écriture synchrone acceptable ici (ou utiliser tokio::fs)
     std::fs::write(&file_path, bytes).map_err(|e| e.to_string())?;
 
+    println!("📂 Ouverture native : {:?}", file_path);
     open::that(&file_path).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+fn start_local_command_server() {
+    std::thread::spawn(|| {
+        // Port inhabituel pour éviter les conflits
+        match std::net::TcpListener::bind("127.0.0.1:45678") {
+            Ok(listener) => {
+                println!("🚀 Serveur Commandes Local démarré sur :45678");
+                for stream in listener.incoming() {
+                    match stream {
+                        Ok(mut stream) => {
+                            std::thread::spawn(move || {
+                                let mut buffer = [0; 2048]; // Buffer suffisant pour URL longue
+                                use std::io::Read;
+                                use std::io::Write;
+                                
+                                if let Ok(n) = stream.read(&mut buffer) {
+                                    if n > 0 {
+                                        let request = String::from_utf8_lossy(&buffer[..n]);
+                                        // On cherche "GET /open?url="
+                                        if let Some(start_idx) = request.find("GET /open?url=") {
+                                            let rest = &request[start_idx + 14..];
+                                            if let Some(end_idx) = rest.find(" HTTP") {
+                                                let encoded_url = &rest[..end_idx];
+                                                let decoded = urlencoding::decode(encoded_url).unwrap_or_default().to_string();
+                                                println!("📡 Commande reçue : Open {}", decoded);
+                                                
+                                                // Lancer l'action via le runtime Tauri
+                                                tauri::async_runtime::spawn(async move {
+                                                    let _ = download_and_open(decoded).await;
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Réponse image PNG vide 1x1 base64 pour que le navigateur soit content (si utilisé en <img src>)
+                                // Ou juste 200 OK avec CORS
+                                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 2\r\n\r\nOK";
+                                let _ = stream.write_all(response.as_bytes());
+                            });
+                        }
+                        Err(e) => eprintln!("Erreur connexion: {}", e),
+                    }
+                }
+            }
+            Err(e) => eprintln!("❌ Impossible de démarrer le serveur de commandes : {}", e),
+        }
+    });
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .setup(|_app| {
+            // Démarrer notre backend de secours
+            start_local_command_server();
+            Ok(())
+        })
+
         .manage(AppState {
             postgres_manager: Mutex::new(None),
             wiki_process: Mutex::new(None),
@@ -164,28 +234,30 @@ pub fn run() {
                         if (!href) return;
                         var extensions = ['.pdf', '.docx', '.xlsx', '.pptx', '.txt', '.csv', '.rtf', '.msg', '.eml'];
                         var ext = href.substring(href.lastIndexOf('.')).toLowerCase();
+                        
+                        // Détection des extensions
                         if (extensions.includes(ext)) {
                             e.preventDefault();
-                            if (window.__TAURI__ && window.__TAURI__.core) {
-                                window.__TAURI__.core.invoke('download_and_open', { url: href })
-                                    .catch(err => console.error("WikiTools Error: " + err));
-                            }
+                            console.log("WikiTools: Appel au serveur local pour", href);
+                            // Appel au serveur local (Plan G)
+                            fetch('http://127.0.0.1:45678/open?url=' + encodeURIComponent(href))
+                                .catch(err => console.error("Echec appel serveur local:", err));
                         }
                     });
                 }
 
-                // 2. MODAL D'AIDE A L'INSTALLATION
+                // MODAL D'AIDE A L'INSTALLATION & CONFIGURATION
                 function checkAndInjectModal() {
                     // L'URL reste sur / lors du setup, donc on détecte le contenu de la page
                     // On cherche "Administrator Email" et "Site URL" qui sont spécifiques à l'install
                     const isSetupPage = document.body.innerText.includes("Administrator Email") && document.body.innerText.includes("Site URL");
                     
                     
-                    if (isSetupPage && !document.getElementById('wt-helper-modal') && !window.wt_modal_dismissed) {
+                    if (isSetupPage && !document.getElementById("wt-helper-modal") && !window.wt_modal_dismissed) {
                         console.log("WikiTools: Page d'installation détectée (via contenu). Injection du modal.");
                         
                         const style = document.createElement('style');
-                        style.id = 'wt-helper-style';
+                        style.id = "wt-helper-style";
                         style.innerHTML = `
                             .wt-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.95); z-index: 2147483647; display: flex; justify-content: center; align-items: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; backdrop-filter: blur(5px); }
                             .wt-modal-content { background: white; width: 650px; max-width: 90%; border-radius: 16px; padding: 40px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); text-align: left; color: #334155; animation: wt-fadein 0.3s ease-out; }
@@ -198,10 +270,10 @@ pub fn run() {
                             .wt-btn { display: block; width: 100%; padding: 16px; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; transition: transform 0.1s, box-shadow 0.2s; margin-top: 30px; text-transform: uppercase; letter-spacing: 1px; box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3); }
                             .wt-btn:hover { transform: translateY(-2px); box-shadow: 0 15px 20px -3px rgba(37, 99, 235, 0.4); }
                         `;
-                        if (!document.getElementById('wt-helper-style')) document.head.appendChild(style);
+                        if (!document.getElementById("wt-helper-style")) document.head.appendChild(style);
 
                         const modal = document.createElement('div');
-                        modal.id = 'wt-helper-modal';
+                        modal.id = "wt-helper-modal";
                         modal.className = 'wt-modal-overlay';
                         modal.innerHTML = `
                             <div class="wt-modal-content">
@@ -227,13 +299,13 @@ pub fn run() {
                         document.body.appendChild(modal);
                         
                         // Gestionnaire fermeture
-                        document.getElementById('wt-close-btn').addEventListener('click', function() { 
+                        document.getElementById("wt-close-btn").addEventListener('click', function() { 
                             window.wt_modal_dismissed = true;
                             modal.remove(); 
                         });
 
                         // Gestionnaire Copie
-                        document.getElementById('wt-copy-btn').addEventListener('click', function(e) {
+                        document.getElementById("wt-copy-btn").addEventListener('click', function(e) {
                             navigator.clipboard.writeText('http://localhost:3000').then(function() {
                                 const btn = e.target;
                                 const originalText = btn.innerText;
@@ -254,6 +326,7 @@ pub fn run() {
             "#;
             let _ = window.eval(injection_script);
         })
+
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

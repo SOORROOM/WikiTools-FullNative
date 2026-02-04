@@ -27,3 +27,4 @@ rand = "0.8"
 tokio = { version = "1", features = ["full"] }
 sqlx = { version = "0.7", features = [ "runtime-tokio", "tls-rustls", "postgres", "macros", "chrono", "uuid", "migrate" ] }
 open = "5.3"
+urlencoding = "2.1.3"
