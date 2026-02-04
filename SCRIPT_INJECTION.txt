@@ -1,0 +1,35 @@
+<script>
+/**
+ * WikiTools Native Opener (V2 - Direct Tauri Access)
+ * Ce script intercepte les clics sur les fichiers et utilise l'objet window.__TAURI__
+ * pour appeler directement la commande Rust "download_and_open".
+ */
+document.addEventListener('click', function(e) {
+    // 1. Trouver le lien cliqué
+    const target = e.target.closest('a');
+    if (!target) return;
+
+    const href = target.href;
+    
+    // 2. Vérifier l'extension
+    const extensions = ['pdf', 'docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt', 'txt', 'jpg', 'png'];
+    const ext = href.split('.').pop().toLowerCase();
+    
+    if (extensions.includes(ext)) {
+        // C'est un fichier cible !
+        e.preventDefault(); // Bloquer le téléchargement / navigation
+        console.log("[WikiTools] Interception du fichier :", href);
+        
+        // 3. Appeler Tauri directement
+        if (window.__TAURI__ && window.__TAURI__.core) {
+            window.__TAURI__.core.invoke('download_and_open', { url: href })
+                .then(() => console.log("[WikiTools] Ouverture demandée avec succès"))
+                .catch(err => alert("Erreur WikiTools : " + err));
+        } else {
+            console.error("L'objet window.__TAURI__ est introuvable. Êtes-vous bien dans l'application WikiTools ?");
+            // Fallback : on laisse le navigateur gérer (téléchargement) si on n'est pas dans l'app
+            window.location.href = href;
+        }
+    }
+});
+</script>

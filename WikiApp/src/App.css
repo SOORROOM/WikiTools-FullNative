@@ -1,0 +1,27 @@
+/* CSS Reset pur pour application plein écran */
+:root {
+  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  box-sizing: border-box;
+}
+
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* Empêche tout scrollbar global */
+  background-color: #0f172a; /* Match le fond de l'app */
+}
+
+.container {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}

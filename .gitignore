@@ -1,0 +1,32 @@
+# --- Rust / Tauri ---
+/WikiApp/src-tauri/target/
+/WikiApp/node_modules/
+/WikiApp/dist/
+**/*.exe
+**/*.dll
+**/*.pdb
+
+# --- Wiki.js & Node ---
+/wiki/node_modules/
+/wiki/logs/
+/wiki/assets/
+/wiki/config.yml
+/wiki/.env
+
+# --- PostgreSQL Engine (Binaires lourds) ---
+/postgresql/
+/data/
+
+# --- Build Artifacts ---
+*.exe
+*.msi
+WikiTools.exe
+WikiTools_Setup*.exe
+
+# --- IDE & System ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
